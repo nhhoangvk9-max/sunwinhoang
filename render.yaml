@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: sunwinhoang-3
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm install
+    startCommand: node 1.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 18.20.4
