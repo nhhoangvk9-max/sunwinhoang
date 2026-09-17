@@ -1,5 +1,5 @@
 /**
- * server.js - Sunwin Tài Xỉu Analyzer (TX_LogicPen_V4)
+ * 1.js - Sunwin Tài Xỉu Analyzer (TX_LogicPen_V4)
  * Giao diện Cyber / Robot / Tech
  * API: https://sunwin-taixiu-dulieu.onrender.com/data
  */
@@ -12,11 +12,13 @@ const PORT = process.env.PORT || 3000;
 const API_URL = 'https://sunwin-taixiu-dulieu.onrender.com/data';
 const HISTORY_LIMIT = 300;
 
+// Hàm lấy thời gian Việt Nam (UTC+7) dạng ISO
 const vnNow = () => {
     const d = new Date();
     return new Date(d.getTime() + (7 * 60 * 60 * 1000)).toISOString();
 };
 
+// Biến lưu trữ thống kê toàn cục
 let stats = {
     total: 0,
     correct: 0,
@@ -28,6 +30,7 @@ let stats = {
     prediction_started: false
 };
 
+// Lớp engine phân tích cầu Tài Xỉu
 class TX_LogicPen_V4 {
     constructor() {
         this.error_streak = 0;
@@ -35,22 +38,26 @@ class TX_LogicPen_V4 {
         this.history = [];
     }
 
+    // Nạp dữ liệu vào engine, sắp xếp giảm dần theo phiên
     loadData(data) {
         this.history = [...data].sort((a, b) => (b.phien || 0) - (a.phien || 0));
     }
 
+    // Trích xuất mảng kết quả đã chuẩn hóa TAI/XIU
     _arr() {
         return this.history.map(s =>
             (s.ket_qua || '').toUpperCase().replace('XỈU', 'XIU').replace('TÀI', 'TAI')
         );
     }
 
+    // Trích xuất mảng điểm tổng
     _points() {
         return this.history
             .filter(s => s.tong !== undefined && s.tong !== null)
             .map(s => s.tong);
     }
 
+    // Phân tích cầu sập (bệt)
     cauSap(arr) {
         if (arr.length < 2) return null;
         let length = 1;
@@ -67,6 +74,7 @@ class TX_LogicPen_V4 {
         return null;
     }
 
+    // Phân tích cầu nối 1-1
     cauNoi(arr) {
         if (arr.length < 5) return null;
         for (let i = 0; i < 4; i++) {
@@ -75,6 +83,7 @@ class TX_LogicPen_V4 {
         return { pred: arr[0] === "TAI" ? "XIU" : "TAI", conf: 82, type: "Cầu Nối 1-1", reason: "Nhịp 1-1 ổn định" };
     }
 
+    // Phân tích cầu đối 2-2 hoặc 3-3
     cauDoi(arr) {
         if (arr.length < 4) return null;
         if (arr[0] === arr[1] && arr[2] === arr[3] && arr[0] !== arr[2]) {
@@ -87,6 +96,7 @@ class TX_LogicPen_V4 {
         return null;
     }
 
+    // Phân tích cầu gãy
     cauGay(arr) {
         if (arr.length >= 5 && arr[0] === arr[1] && arr[1] === arr[2] && arr[2] !== arr[3] && arr[3] === arr[4]) {
             return { pred: arr[3], conf: 74, type: "Gãy 3-2", reason: "AAABB → B" };
@@ -100,6 +110,7 @@ class TX_LogicPen_V4 {
         return null;
     }
 
+    // Phát hiện mẫu lặp trong lịch sử
     phatHienMauLap(arr) {
         if (arr.length < 6) return null;
         for (let len = 2; len <= 4; len++) {
@@ -114,6 +125,7 @@ class TX_LogicPen_V4 {
         return null;
     }
 
+    // Dự đoán dựa trên vị điểm tổng
     duDoanVi() {
         const points = this._points();
         if (points.length < 5) return null;
@@ -130,6 +142,7 @@ class TX_LogicPen_V4 {
         return null;
     }
 
+    // Tổng hợp tất cả phương pháp dự đoán theo thứ tự ưu tiên
     tongHopDuDoan() {
         const arr = this._arr();
         if (arr.length < 2) return null;
@@ -138,6 +151,7 @@ class TX_LogicPen_V4 {
                { pred: arr[0], conf: 55, type: "Theo", reason: "Bám phiên cuối" };
     }
 
+    // Áp dụng đảo chiều khi chuỗi lỗi >= 2
     apDungDaoChieu(p) {
         if (!p || this.history.length < 1) return p;
         const currentResult = this._arr()[0];
@@ -152,6 +166,7 @@ class TX_LogicPen_V4 {
         return p;
     }
 
+    // Hàm dự đoán chính
     predict(data) {
         this.loadData(data);
         let result = this.tongHopDuDoan();
@@ -162,6 +177,7 @@ class TX_LogicPen_V4 {
         return result;
     }
 
+    // Cập nhật trạng thái streak lỗi
     updateStatus(actual) {
         if (this.last_prediction) {
             const a = actual.toUpperCase().replace('XỈU', 'XIU').replace('TÀI', 'TAI');
@@ -177,6 +193,7 @@ let lastData = [];
 let lastPrediction = null;
 let predictionLog = [];
 
+// Hàm fetch dữ liệu từ API và phân tích
 async function fetchAndAnalyze() {
     try {
         const res = await axios.get(API_URL, { timeout: 12000 });
@@ -243,7 +260,7 @@ async function fetchAndAnalyze() {
 
             stats.prediction_started = true;
 
-            console.log(`[Dự đoán] #${nextPhien} → \( {displayPred} ( \){result.conf}%) | ${result.type} | ${result.reason}`);
+            console.log(`[Dự đoán] #${nextPhien} → ${displayPred} (${result.conf}%) | ${result.type} | ${result.reason}`);
         }
     } catch (err) {
         console.error('Lỗi fetch API:', err.message);
@@ -291,7 +308,6 @@ app.get('/', (req, res) => {
         linear-gradient(180deg, #05070f 0%, #0a0f1c 100%);
     }
 
-    /* Grid background */
     body::before {
       content: '';
       position: fixed;
@@ -312,7 +328,6 @@ app.get('/', (req, res) => {
       padding: 28px 20px 50px;
     }
 
-    /* Header */
     header {
       text-align: center;
       margin-bottom: 32px;
@@ -365,7 +380,6 @@ app.get('/', (req, res) => {
       50% { opacity: 0.5; transform: scale(0.85); }
     }
 
-    /* Grid layout */
     .grid {
       display: grid;
       grid-template-columns: 1.2fr 1fr;
@@ -378,7 +392,6 @@ app.get('/', (req, res) => {
       .logo { font-size: 1.6rem; letter-spacing: 2px; }
     }
 
-    /* Card */
     .card {
       background: var(--card);
       border: 1px solid var(--border);
@@ -425,7 +438,6 @@ app.get('/', (req, res) => {
       box-shadow: 0 0 8px var(--cyan);
     }
 
-    /* Prediction */
     .pred-value {
       font-family: 'Orbitron', sans-serif;
       font-size: 3.2rem;
@@ -456,7 +468,6 @@ app.get('/', (req, res) => {
       color: var(--text);
     }
 
-    /* Stats */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -501,7 +512,6 @@ app.get('/', (req, res) => {
       align-items: center;
     }
 
-    /* History table */
     .table-wrap {
       overflow-x: auto;
       margin-top: 4px;
@@ -559,7 +569,6 @@ app.get('/', (req, res) => {
     .result-ok { color: var(--green); font-weight: 600; }
     .result-err { color: var(--red); font-weight: 600; }
 
-    /* Footer */
     footer {
       text-align: center;
       margin-top: 28px;
@@ -568,7 +577,6 @@ app.get('/', (req, res) => {
       letter-spacing: 1px;
     }
 
-    /* Scanline effect */
     .scanline {
       position: fixed;
       top: 0;
@@ -606,7 +614,6 @@ app.get('/', (req, res) => {
     </header>
 
     <div class="grid">
-      <!-- Prediction Card -->
       <div class="card">
         <div class="card-title">Next Session Prediction</div>
         <div id="pred" class="pred-value">---</div>
@@ -618,7 +625,6 @@ app.get('/', (req, res) => {
         </div>
       </div>
 
-      <!-- Stats Card -->
       <div class="card">
         <div class="card-title">Performance Matrix</div>
         <div class="stats-grid">
@@ -646,7 +652,6 @@ app.get('/', (req, res) => {
       </div>
     </div>
 
-    <!-- History -->
     <div class="card">
       <div class="card-title">Prediction History Log</div>
       <div class="table-wrap">
@@ -723,6 +728,7 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
+// API trả dữ liệu dashboard
 app.get('/api/dashboard', (req, res) => {
     res.json({
         prediction: lastPrediction,
@@ -734,11 +740,14 @@ app.get('/api/dashboard', (req, res) => {
     });
 });
 
+// API trả dữ liệu thô
 app.get('/api/raw', (req, res) => {
     res.json({ data: lastData.slice(0, 30) });
 });
 
+// Khởi động server
 app.listen(PORT, () => {
     console.log('Server chạy tại http://localhost:' + PORT);
     console.log('Dashboard Cyber UI: http://localhost:' + PORT);
 });
+
